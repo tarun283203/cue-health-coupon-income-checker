@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CueHealth Partner Earnings</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0D1F17;min-height:100vh;color:#fff}
+
+/* ── LOOKUP ── */
+.lookup{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#0D1F17 0%,#1B4332 60%,#0D1F17 100%)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:36px}
+.brand-logo{width:44px;height:44px;background:#C8860A;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.brand-name{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.5px}
+.brand-name span{color:#C8860A}
+
+.lookup-card{background:rgba(255,255,255,.07);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:36px 32px;width:100%;max-width:420px}
+.lookup-card h2{font-size:26px;font-weight:800;color:#fff;margin-bottom:8px;letter-spacing:-.5px}
+.lookup-card .sub{font-size:14px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:28px}
+.inp-wrap{position:relative;margin-bottom:14px}
+.inp{width:100%;padding:16px 20px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);border-radius:14px;font-size:18px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#fff;outline:none;transition:.2s;-webkit-text-fill-color:#fff}
+.inp::placeholder{color:rgba(255,255,255,.3);letter-spacing:1px;font-weight:400;font-size:15px;text-transform:none}
+.inp:focus{border-color:#C8860A;background:rgba(200,134,10,.08)}
+.btn{width:100%;padding:16px;background:linear-gradient(135deg,#C8860A,#E09B1A);border:none;border-radius:14px;font-size:16px;font-weight:700;color:#0D1F17;cursor:pointer;transition:.2s;letter-spacing:.3px}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(200,134,10,.35)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.errmsg{font-size:13px;color:#FF6B6B;margin-top:10px;padding:10px 14px;background:rgba(255,107,107,.1);border-radius:10px;border:1px solid rgba(255,107,107,.2);display:none;line-height:1.5}
+
+.features{display:flex;gap:20px;margin-top:32px;flex-wrap:wrap;justify-content:center}
+.feat{text-align:center}
+.feat .icon{font-size:24px;margin-bottom:4px}
+.feat .label{font-size:11px;color:rgba(255,255,255,.4);white-space:nowrap}
+
+/* ── LOADING ── */
+.loading{min-height:100vh;display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:#0D1F17}
+.dots{display:flex;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%;background:#C8860A;animation:bounce .8s ease-in-out infinite}
+.dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,80%,100%{transform:scale(0);opacity:.5}40%{transform:scale(1);opacity:1}}
+.loading p{font-size:14px;color:rgba(255,255,255,.5)}
+
+/* ── DASHBOARD ── */
+.dash{display:none;flex-direction:column;min-height:100vh;background:#0D1F17}
+.dash-header{background:linear-gradient(135deg,#1B4332,#2D6A4F);padding:20px;position:sticky;top:0;z-index:10}
+.dash-header .back{font-size:12px;color:rgba(255,255,255,.5);cursor:pointer;margin-bottom:12px;display:flex;align-items:center;gap:4px;width:fit-content;transition:.15s}
+.dash-header .back:hover{color:#C8860A}
+.partner-row{display:flex;align-items:center;gap:14px}
+.av{width:50px;height:50px;background:linear-gradient(135deg,#C8860A,#E09B1A);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#0D1F17;flex-shrink:0;text-transform:uppercase}
+.pdetails .pname{font-size:18px;font-weight:700;color:#fff}
+.pdetails .pmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.pmeta span{font-size:10.5px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
+.code-badge{display:inline-block;margin-top:6px;font-size:12px;font-weight:700;padding:3px 12px;border-radius:8px;background:#C8860A;color:#0D1F17;font-family:monospace;letter-spacing:.5px}
+
+/* MOTIVATION BAR */
+.motiv{margin:16px;padding:14px 16px;border-radius:14px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:500}
+.motiv.zero{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6)}
+.motiv.low{background:rgba(200,134,10,.15);border:1px solid rgba(200,134,10,.25);color:#C8860A}
+.motiv.mid{background:rgba(5,150,105,.15);border:1px solid rgba(5,150,105,.25);color:#34D399}
+.motiv.high{background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.25);color:#A78BFA}
+.motiv.star{background:linear-gradient(135deg,rgba(200,134,10,.2),rgba(224,155,26,.2));border:1px solid #C8860A;color:#FFD700}
+.motiv-icon{font-size:24px;flex-shrink:0}
+
+/* EARN CARDS */
+.earn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 16px}
+.ec{border-radius:16px;padding:16px 14px;position:relative;overflow:hidden}
+.ec.today{background:linear-gradient(135deg,#C8860A,#E09B1A);color:#0D1F17}
+.ec.month{background:linear-gradient(135deg,#1B4332,#2D6A4F);border:1px solid rgba(255,255,255,.1)}
+.ec.week{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.ec.life{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.ec-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;opacity:.7;margin-bottom:8px}
+.ec.today .ec-label{color:#0D1F17;opacity:.7}
+.ec-amt{font-size:28px;font-weight:800;letter-spacing:-.5px;color:#fff}
+.ec.today .ec-amt{color:#0D1F17}
+.ec.month .ec-amt{color:#C8860A}
+.ec-sub{font-size:11px;margin-top:4px;opacity:.55;color:#fff}
+.ec.today .ec-sub{color:#0D1F17}
+.ec-dec{position:absolute;right:-8px;bottom:-8px;font-size:42px;opacity:.15}
+
+/* NEXT MILESTONE */
+.milestone{margin:0 16px 16px;padding:14px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px}
+.ms-label{font-size:10.5px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.ms-bar-wrap{background:rgba(255,255,255,.08);border-radius:6px;height:6px;margin-bottom:8px;overflow:hidden}
+.ms-bar{height:100%;border-radius:6px;background:linear-gradient(90deg,#C8860A,#E09B1A);transition:width .8s ease}
+.ms-text{font-size:12px;color:rgba(255,255,255,.6);display:flex;justify-content:space-between}
+
+/* ORDERS */
+.orders-wrap{margin:0 16px 24px}
+.ocard{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;overflow:hidden}
+.ohead{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;font-weight:600;display:flex;justify-content:space-between;color:rgba(255,255,255,.7)}
+.orow{display:flex;align-items:center;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.06);gap:12px}
+.orow:last-child{border-bottom:none}
+.oicon{width:32px;height:32px;background:rgba(27,67,50,.5);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.oinfo{flex:1}
+.oid{font-size:12.5px;font-weight:500;color:#fff;display:flex;align-items:center;gap:6px}
+.odate{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px}
+.oearn{font-size:14px;font-weight:700;color:#34D399}
+.ob{font-size:9px;padding:2px 6px;border-radius:5px;font-weight:600}
+.ob-today{background:rgba(200,134,10,.25);color:#C8860A}
+.ob-month{background:rgba(27,67,50,.5);color:#34D399}
+.noo{padding:32px;text-align:center;color:rgba(255,255,255,.3);font-size:13px;line-height:1.8}
+.refresh{padding:8px 16px;font-size:10px;color:rgba(255,255,255,.25);text-align:right;border-top:1px solid rgba(255,255,255,.06)}
+
+.setup-banner{margin:16px;padding:14px 16px;background:rgba(200,134,10,.1);border:1px solid rgba(200,134,10,.2);border-radius:14px;font-size:12.5px;color:rgba(200,134,10,.9);line-height:1.6;display:none}
+</style>
+</head>
+<body>
+
+<script>
+const API = "/api/earnings";
+const COMMISSION = 200;
+</script>
+
+<!-- LOOKUP -->
+<div class="lookup" id="lookupScreen">
+  <div class="brand">
+    <div class="brand-logo">🌿</div>
+    <div class="brand-name">Cue<span>Health</span></div>
+  </div>
+  <div class="lookup-card">
+    <h2>Apni Kamai Dekho 💰</h2>
+    <p class="sub">Partner code daalo — aaj ki, is mahine ki aur poori kamai ek jagah dekho.</p>
+    <div class="inp-wrap">
+      <input class="inp" id="codeInp" placeholder="Apna code daalo..." maxlength="20" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="btn" id="checkBtn" onclick="check()">Earnings Check Karo →</button>
+    <div class="errmsg" id="errMsg"></div>
+    <div class="setup-banner" id="setupBanner">
+      ⚙️ Dashboard connect ho raha hai — agar error aa rahi hai to admin ko contact karein.
+    </div>
+  </div>
+  <div class="features">
+    <div class="feat"><div class="icon">⚡</div><div class="label">Live Data</div></div>
+    <div class="feat"><div class="icon">🔒</div><div class="label">Secure</div></div>
+    <div class="feat"><div class="icon">📱</div><div class="label">Mobile Friendly</div></div>
+    <div class="feat"><div class="icon">🏦</div><div class="label">Weekly Payment</div></div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div class="loading" id="loadingScreen">
+  <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  <p>Aapki earnings fetch ho rahi hain…</p>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dash" id="dashScreen">
+  <div class="dash-header">
+    <div class="back" onclick="goBack()">← Wapas jaao</div>
+    <div class="partner-row">
+      <div class="av" id="avEl"></div>
+      <div class="pdetails">
+        <div class="pname" id="pnameEl"></div>
+        <div class="pmeta" id="pmetaEl"></div>
+        <div class="code-badge" id="cpillEl"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="motiv" id="motivEl"><span class="motiv-icon" id="motivIcon"></span><span id="motivText"></span></div>
+
+  <div class="earn-grid">
+    <div class="ec today"><div class="ec-label">Aaj Ki Kamai</div><div class="ec-amt" id="todayAmt">₹0</div><div class="ec-sub" id="todaySub">0 orders</div><div class="ec-dec">☀️</div></div>
+    <div class="ec month"><div class="ec-label">Is Mahine</div><div class="ec-amt" id="monthAmt">₹0</div><div class="ec-sub" id="monthSub">0 orders</div><div class="ec-dec">📅</div></div>
+    <div class="ec week"><div class="ec-label">Is Hafte</div><div class="ec-amt" id="weekAmt">₹0</div><div class="ec-sub" id="weekSub">0 orders</div><div class="ec-dec">📊</div></div>
+    <div class="ec life"><div class="ec-label">Total Kamai</div><div class="ec-amt" id="lifeAmt">₹0</div><div class="ec-sub" id="lifeSub">0 orders</div><div class="ec-dec">🏆</div></div>
+  </div>
+
+  <div class="milestone" id="milestoneEl">
+    <div class="ms-label">Next Milestone Bonus</div>
+    <div class="ms-bar-wrap"><div class="ms-bar" id="msBar" style="width:0%"></div></div>
+    <div class="ms-text"><span id="msLeft"></span><span id="msBonus"></span></div>
+  </div>
+
+  <div class="orders-wrap">
+    <div class="ocard">
+      <div class="ohead"><span>Recent Orders</span><span id="totalOC"></span></div>
+      <div id="ordersList"></div>
+      <div class="refresh" id="refreshEl"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const IST_OFFSET=5.5*3600000;
+const MILESTONES=[{orders:10,bonus:600},{orders:25,bonus:750},{orders:50,bonus:1500},{orders:100,bonus:3000},{orders:250,bonus:12000},{orders:500,bonus:28000}];
+
+document.getElementById('codeInp').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''));
+document.getElementById('codeInp').addEventListener('keypress',e=>e.key==='Enter'&&check());
+
+async function check(){
+  const code=document.getElementById('codeInp').value.trim().toUpperCase();
+  if(!code)return;
+  err('');
+  document.getElementById('checkBtn').disabled=true;
+  show('loadingScreen');hide('lookupScreen');
+
+  try{
+    const res=await fetch(`${API}?code=${encodeURIComponent(code)}`,{
+      method:'GET',
+      headers:{'Accept':'application/json'},
+      signal:AbortSignal.timeout(15000)
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    if(!data.found){
+      err(`"${code}" code nahi mila. Sahi code daalo ya admin se contact karein.`);
+      show('lookupScreen');hide('loadingScreen');
+      document.getElementById('checkBtn').disabled=false;
+      return;
+    }
+    render(data);
+  }catch(e){
+    if(e.name==='TimeoutError'||e.name==='AbortError'){
+      err('Server slow hai. Thodi der baad try karein.');
+    } else {
+      // Show setup banner for connection errors
+      document.getElementById('setupBanner').style.display='block';
+      err('Connection issue. Admin se contact karein.');
+    }
+    show('lookupScreen');hide('loadingScreen');
+    document.getElementById('checkBtn').disabled=false;
+  }
+}
+
+function render(d){
+  const name=d.partnerName||d.code;
+  document.getElementById('avEl').textContent=name[0];
+  document.getElementById('pnameEl').textContent=name;
+  document.getElementById('cpillEl').textContent=d.code;
+  const meta=document.getElementById('pmetaEl');
+  meta.innerHTML=[d.city&&`<span>📍 ${esc(d.city)}</span>`,d.occupation&&`<span>💼 ${esc(d.occupation)}</span>`].filter(Boolean).join('');
+
+  // All date buckets in IST (order dates from Shopify are UTC)
+  const ist=new Date(Date.now()+IST_OFFSET);
+  const today=ist.toISOString().slice(0,10);
+  const month=today.slice(0,7);
+  const wd=ist.getUTCDay();
+  const weekStart=new Date(ist.getTime()-(wd===0?6:wd-1)*86400000).toISOString().slice(0,10);
+
+  const orders=d.orders||[];
+  let tc=0,mc=0,wc=0,n=orders.length;
+  orders.forEach(o=>{const dt=istDay(o.date);if(dt===today)tc++;if(dt.slice(0,7)===month)mc++;if(dt>=weekStart)wc++;});
+
+  // Animate counters
+  animCount('todayAmt',tc*COMMISSION);animCount('monthAmt',mc*COMMISSION);animCount('weekAmt',wc*COMMISSION);animCount('lifeAmt',n*COMMISSION);
+  s('todaySub',`${tc} order${tc!==1?'s':''}`);s('monthSub',`${mc} order${mc!==1?'s':''}`);s('weekSub',`${wc} order${wc!==1?'s':''}`);s('lifeSub',`${n} order${n!==1?'s':''}`);
+  s('totalOC',`${n} total`);
+
+  // Milestone
+  const next=MILESTONES.find(m=>m.orders>n)||MILESTONES[MILESTONES.length-1];
+  const idx=MILESTONES.indexOf(next);
+  const prevOrders=idx>0?MILESTONES[idx-1].orders:0;
+  const pct=Math.max(0,Math.min(100,Math.round((n-prevOrders)/(next.orders-prevOrders)*100)));
+  document.getElementById('msBar').style.width=pct+'%';
+  s('msLeft',`${n}/${next.orders} orders`);
+  s('msBonus',n>=MILESTONES[MILESTONES.length-1].orders?'🏆 All bonuses unlocked!':next.orders>n?`₹${next.bonus.toLocaleString()} bonus milega!`:'');
+
+  // Motivation
+  const life=n*COMMISSION;
+  const m=document.getElementById('motivEl');
+  const [cls,icon,text]=life===0?['zero','🌱','Shuruat karo! Apna code share karo — pehla order aata hi hai!']:
+    life<2000?['low','🔥','Achhi shuruat! Abhi aur contacts ko bhejo, momentum aa raha hai!']: 
+    life<10000?['mid','⭐','Wah! Aap top partner ban rahe ho! Keep going!']: 
+    life<30000?['high','🏆','Incredible! Aap superstar partner ho! Congratulations!']: 
+    ['star','🌟','LEGENDARY! Aap CueHealth ke Diamond Partner hain! 👑'];
+  m.className='motiv '+cls;
+  document.getElementById('motivIcon').textContent=icon;
+  document.getElementById('motivText').textContent=text;
+
+  // Orders list
+  const list=document.getElementById('ordersList');
+  if(!orders.length){
+    list.innerHTML='<div class="noo">Abhi koi order nahi aaya 😊<br>Apna code share karo aur<br>pehli kamai ka wait karo! 🌿</div>';
+  }else{
+    const sorted=[...orders].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
+    list.innerHTML=sorted.map(o=>{
+      const dt=istDay(o.date);
+      const badge=dt===today?'<span class="ob ob-today">Aaj</span>':dt.slice(0,7)===month?'<span class="ob ob-month">Is mahine</span>':'';
+      const ds=o.date?new Date(o.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Kolkata'}):'-';
+      return `<div class="orow"><div class="oicon">🛒</div><div class="oinfo"><div class="oid">${esc(o.name||('#'+o.id))} ${badge}</div><div class="odate">${ds}</div></div><div class="oearn">+₹${COMMISSION}</div></div>`;
+    }).join('');
+  }
+
+  const t=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'});
+  s('refreshEl',`Live data · Updated ${t} IST`);
+  hide('loadingScreen');show('dashScreen');
+  document.getElementById('checkBtn').disabled=false;
+}
+
+function animCount(id,target){
+  const el=document.getElementById(id);
+  const dur=600,step=16,steps=dur/step;
+  let cur=0;
+  const inc=target/steps;
+  const t=setInterval(()=>{
+    cur=Math.min(cur+inc,target);
+    el.textContent='₹'+Math.round(cur).toLocaleString('en-IN');
+    if(cur>=target)clearInterval(t);
+  },step);
+}
+function goBack(){hide('dashScreen');show('lookupScreen');document.getElementById('codeInp').value='';document.getElementById('checkBtn').disabled=false;}
+function err(m){const e=document.getElementById('errMsg');e.textContent=m;e.style.display=m?'block':'none';}
+function istDay(d){return d?new Date(new Date(d).getTime()+IST_OFFSET).toISOString().slice(0,10):'';}
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function s(id,v){document.getElementById(id).textContent=v;}
+function show(id){const el=document.getElementById(id);el.style.display='flex';if(id==='dashScreen')el.style.flexDirection='column';}
+function hide(id){document.getElementById(id).style.display='none';}
+</script>
+</body>
+</html>
