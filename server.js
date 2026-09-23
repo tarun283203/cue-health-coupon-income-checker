@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════
 // CueHealth Partner Dashboard — Node server for Railway
 // Serves public/index.html and GET /api/earnings?code=XXXX
-// Env vars: SHOPIFY_TOKEN (required), SHOPIFY_DOMAIN (optional)
+// Env vars: SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (Dev Dashboard app)
+//           or SHOPIFY_TOKEN (legacy admin-created app, shpat_...)
+//           SHOPIFY_DOMAIN, SHOPIFY_API_VERSION (optional)
 // ═══════════════════════════════════════════════════
 
 const http = require('http');
@@ -10,8 +12,11 @@ const path = require('path');
 
 const PORT           = process.env.PORT || 3000;
 const SHOPIFY_DOMAIN = process.env.SHOPIFY_DOMAIN || 'wqt9qv-tg.myshopify.com';
-const SHOPIFY_TOKEN  = process.env.SHOPIFY_TOKEN;
-const API_VERSION    = '2024-10';
+const STATIC_TOKEN   = process.env.SHOPIFY_TOKEN;
+const CLIENT_ID      = process.env.SHOPIFY_CLIENT_ID;
+const CLIENT_SECRET  = process.env.SHOPIFY_CLIENT_SECRET;
+const API_VERSION    = process.env.SHOPIFY_API_VERSION || '2026-07';
+const CONFIGURED     = Boolean(STATIC_TOKEN || (CLIENT_ID && CLIENT_SECRET));
 
 const MAX_ORDER_PAGES = 20;          // 20 × 250 = 5000 orders max per code
 const CACHE_TTL_MS    = 60 * 1000;   // cache each code's result for 1 minute
@@ -22,21 +27,58 @@ const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'))
 const cache = new Map();   // code → { t, data }
 const hits  = new Map();   // ip   → { t, n }
 
+// ── Shopify auth ────────────────────────────────────
+// Dev Dashboard apps use the client credentials grant: tokens expire
+// (~24h), so we fetch one on demand and refresh it before it runs out.
+
+let token = null;          // { value, expiresAt }
+let tokenRequest = null;   // in-flight refresh, shared by concurrent callers
+
+async function fetchToken() {
+  const res = await fetch(`https://${SHOPIFY_DOMAIN}/admin/oauth/access_token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'client_credentials',
+      client_id:     CLIENT_ID,
+      client_secret: CLIENT_SECRET
+    }),
+    signal: AbortSignal.timeout(12000)
+  });
+  if (!res.ok) throw new Error(`Token request HTTP ${res.status}: ${await res.text()}`);
+  const body = await res.json();
+  const ttl  = (body.expires_in || 86400) * 1000;
+  token = { value: body.access_token, expiresAt: Date.now() + ttl - 5 * 60 * 1000 };
+  console.log(`[auth] new Shopify token, scopes: ${body.scope}`);
+  return token.value;
+}
+
+async function getToken(forceRefresh = false) {
+  if (STATIC_TOKEN) return STATIC_TOKEN;
+  if (!forceRefresh && token && Date.now() < token.expiresAt) return token.value;
+  if (!tokenRequest) tokenRequest = fetchToken().finally(() => { tokenRequest = null; });
+  return tokenRequest;
+}
+
 // ── Shopify ─────────────────────────────────────────
 
-async function shopify(query, variables) {
+async function shopify(query, variables, retried = false) {
   const res = await fetch(
     `https://${SHOPIFY_DOMAIN}/admin/api/${API_VERSION}/graphql.json`,
     {
       method:  'POST',
       headers: {
-        'X-Shopify-Access-Token': SHOPIFY_TOKEN,
+        'X-Shopify-Access-Token': await getToken(),
         'Content-Type':           'application/json'
       },
       body:   JSON.stringify({ query, variables }),
       signal: AbortSignal.timeout(12000)
     }
   );
+  if (res.status === 401 && !STATIC_TOKEN && !retried) {
+    await getToken(true);
+    return shopify(query, variables, true);
+  }
   if (!res.ok) throw new Error(`Shopify HTTP ${res.status}`);
   const body = await res.json();
   if (body.errors) throw new Error(JSON.stringify(body.errors));
@@ -123,7 +165,7 @@ async function handleEarnings(req, res, url) {
 
   const code = (url.searchParams.get('code') || '').toUpperCase().trim();
   if (!/^[A-Z0-9_-]{1,32}$/.test(code)) return send(res, 400, { error: 'Invalid code' });
-  if (!SHOPIFY_TOKEN) return send(res, 500, { error: 'Server not configured' });
+  if (!CONFIGURED) return send(res, 500, { error: 'Server not configured' });
 
   const cached = cache.get(code);
   if (cached && Date.now() - cached.t < CACHE_TTL_MS) return send(res, 200, cached.data);
@@ -160,5 +202,5 @@ setInterval(() => {
 
 server.listen(PORT, () => {
   console.log(`CueHealth dashboard on :${PORT}`);
-  if (!SHOPIFY_TOKEN) console.warn('WARNING: SHOPIFY_TOKEN is not set');
+  if (!CONFIGURED) console.warn('WARNING: set SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (or SHOPIFY_TOKEN)');
 });
