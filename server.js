@@ -224,16 +224,17 @@ async function lookup(code) {
 
   if (title === null && orders.length === 0) return { found: false, code };
 
-  // Title format: "CueHealth Partner — Name | City | Phone"
+  // Title format: "CueHealth Partner — Name | City | Phone", but City may be
+  // missing, so drop anything phone-like — this endpoint is public
   const inner = (title || '').replace(/^CueHealth Partner\s*[—-]\s*/i, '');
   const parts = inner.split('|').map(s => s.trim());
+  const isPhone = s => (s.match(/\d/g) || []).length >= 7;
 
   return {
     found:       true,
     code,
     partnerName: parts[0] || code,
-    city:        parts[1] || '',
-    // phone (parts[2]) is intentionally not returned — this endpoint is public
+    city:        parts.slice(1).find(s => s && !isPhone(s)) || '',
     orders: orders.map(o => ({
       id:   o.id.split('/').pop(),
       name: o.name,
