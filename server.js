@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════
 // CueHealth Partner Dashboard — Node server for Railway
 // Serves public/index.html and GET /api/earnings?code=XXXX
+// Also handles Shopify's install (OAuth) handshake: / → /auth/callback
 // Env vars: SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (Dev Dashboard app)
 //           or SHOPIFY_TOKEN (legacy admin-created app, shpat_...)
 //           SHOPIFY_DOMAIN, SHOPIFY_API_VERSION (optional)
@@ -8,7 +9,8 @@
 
 const http = require('http');
 const fs   = require('fs');
-const path = require('path');
+const path   = require('path');
+const crypto = require('crypto');
 
 const PORT           = process.env.PORT || 3000;
 const SHOPIFY_DOMAIN = process.env.SHOPIFY_DOMAIN || 'wqt9qv-tg.myshopify.com';
@@ -17,6 +19,8 @@ const CLIENT_ID      = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET  = process.env.SHOPIFY_CLIENT_SECRET;
 const API_VERSION    = process.env.SHOPIFY_API_VERSION || '2026-07';
 const CONFIGURED     = Boolean(STATIC_TOKEN || (CLIENT_ID && CLIENT_SECRET));
+const SCOPES         = 'read_orders,read_all_orders,read_discounts';
+const REQUIRED       = ['read_orders', 'read_discounts'];
 
 const MAX_ORDER_PAGES = 20;          // 20 × 250 = 5000 orders max per code
 const CACHE_TTL_MS    = 60 * 1000;   // cache each code's result for 1 minute
@@ -31,7 +35,7 @@ const hits  = new Map();   // ip   → { t, n }
 // Dev Dashboard apps use the client credentials grant: tokens expire
 // (~24h), so we fetch one on demand and refresh it before it runs out.
 
-let token = null;          // { value, expiresAt }
+let token = null;          // { value, expiresAt, scope }
 let tokenRequest = null;   // in-flight refresh, shared by concurrent callers
 
 async function fetchToken() {
@@ -45,10 +49,15 @@ async function fetchToken() {
     }),
     signal: AbortSignal.timeout(12000)
   });
-  if (!res.ok) throw new Error(`Token request HTTP ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    // Shopify returns an HTML error page; keep only its <title> for the log
+    const text   = await res.text();
+    const reason = (text.match(/<title>([^<]*)<\/title>/i)?.[1] || text).slice(0, 200);
+    throw new Error(`Token request HTTP ${res.status}: ${reason}`);
+  }
   const body = await res.json();
   const ttl  = (body.expires_in || 86400) * 1000;
-  token = { value: body.access_token, expiresAt: Date.now() + ttl - 5 * 60 * 1000 };
+  token = { value: body.access_token, expiresAt: Date.now() + ttl - 5 * 60 * 1000, scope: body.scope || '' };
   console.log(`[auth] new Shopify token, scopes: ${body.scope}`);
   return token.value;
 }
@@ -58,6 +67,98 @@ async function getToken(forceRefresh = false) {
   if (!forceRefresh && token && Date.now() < token.expiresAt) return token.value;
   if (!tokenRequest) tokenRequest = fetchToken().finally(() => { tokenRequest = null; });
   return tokenRequest;
+}
+
+// ── Shopify install (OAuth) ─────────────────────────
+// With the legacy install flow Shopify sends the merchant to the app URL
+// with ?shop=&hmac=. We verify it, send them to Shopify's permission screen,
+// and on /auth/callback exchange the code, which completes the install.
+
+const nonces = new Map();  // state → created at
+
+function validHmac(params) {
+  const hmac = params.get('hmac');
+  if (!hmac || !CLIENT_SECRET) return false;
+  const message = [...params.entries()]
+    .filter(([k]) => k !== 'hmac' && k !== 'signature')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('&');
+  const digest = crypto.createHmac('sha256', CLIENT_SECRET).update(message).digest('hex');
+  return digest.length === hmac.length &&
+         crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
+}
+
+function isOurShop(shop) {
+  return shop === SHOPIFY_DOMAIN;
+}
+
+async function hasRequiredScopes() {
+  if (STATIC_TOKEN) return true;
+  try {
+    await getToken();
+    const granted = (token?.scope || '').split(',');
+    return REQUIRED.every(s => granted.includes(s));
+  } catch {
+    return false;   // e.g. app_not_installed
+  }
+}
+
+function authorizeUrl(shop, host) {
+  const state = crypto.randomBytes(16).toString('hex');
+  nonces.set(state, Date.now());
+  const redirect = `https://${host}/auth/callback`;
+  return `https://${shop}/admin/oauth/authorize?` + new URLSearchParams({
+    client_id: CLIENT_ID, scope: SCOPES, redirect_uri: redirect, state
+  });
+}
+
+async function handleInstallStart(req, res, url) {
+  const shop = url.searchParams.get('shop');
+  if (!validHmac(url.searchParams) || !isOurShop(shop) || await hasRequiredScopes()) {
+    return send(res, 200, INDEX_HTML, 'text/html; charset=utf-8');
+  }
+  const target = authorizeUrl(shop, req.headers['x-forwarded-host'] || req.headers.host);
+  console.log(`[install] sending ${shop} to permission screen`);
+  if (url.searchParams.get('embedded') === '1') {
+    // Inside the admin iframe: break out to the top window
+    const t = JSON.stringify(target);
+    return send(res, 200,
+      `<!DOCTYPE html><script>window.top.location.href=${t}</script>` +
+      `<a href=${t} target="_top">Continue</a>`, 'text/html; charset=utf-8');
+  }
+  res.writeHead(302, { Location: target });
+  res.end();
+}
+
+async function handleInstallCallback(req, res, url) {
+  const p     = url.searchParams;
+  const shop  = p.get('shop');
+  const state = p.get('state');
+  if (!validHmac(p) || !isOurShop(shop) || !nonces.has(state)) {
+    return send(res, 400, 'Invalid install request. Start the install again from Shopify.', 'text/plain');
+  }
+  nonces.delete(state);
+
+  const r = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code: p.get('code') }),
+    signal:  AbortSignal.timeout(12000)
+  });
+  if (!r.ok) {
+    console.error(`[install] code exchange failed: HTTP ${r.status}`);
+    return send(res, 502, 'Install failed while talking to Shopify. Try again.', 'text/plain');
+  }
+  const body = await r.json();
+  // Offline token from the install; it doesn't expire, so use it until restart.
+  // After a restart, client credentials pick up the same granted scopes.
+  if (!STATIC_TOKEN) token = { value: body.access_token, expiresAt: Infinity, scope: body.scope || '' };
+  cache.clear();
+  console.log(`[install] ${shop} installed, scopes: ${body.scope}`);
+
+  res.writeHead(302, { Location: '/' });
+  res.end();
 }
 
 // ── Shopify ─────────────────────────────────────────
@@ -187,6 +288,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/health')       return send(res, 200, { ok: true });
   if (url.pathname === '/api/earnings') return handleEarnings(req, res, url);
+  if (url.pathname === '/auth/callback') return handleInstallCallback(req, res, url).catch(e => {
+    console.error('[install]', e.message);
+    send(res, 502, 'Install failed. Try again.', 'text/plain');
+  });
+  if (url.pathname === '/' && url.searchParams.has('shop') && CLIENT_ID && !STATIC_TOKEN) {
+    return handleInstallStart(req, res, url).catch(e => {
+      console.error('[install]', e.message);
+      send(res, 200, INDEX_HTML, 'text/html; charset=utf-8');
+    });
+  }
   if (url.pathname === '/' || url.pathname === '/index.html') {
     return send(res, 200, INDEX_HTML, 'text/html; charset=utf-8');
   }
@@ -198,6 +309,7 @@ setInterval(() => {
   const now = Date.now();
   for (const [k, v] of cache) if (now - v.t > CACHE_TTL_MS) cache.delete(k);
   for (const [k, v] of hits)  if (now - v.t > 60000)        hits.delete(k);
+  for (const [k, t] of nonces) if (now - t > 10 * 60 * 1000) nonces.delete(k);
 }, 5 * 60 * 1000).unref();
 
 server.listen(PORT, () => {

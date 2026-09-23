@@ -5,7 +5,8 @@
   "description": "CueHealth partner earnings checker",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --env-file=.env server.js"
   },
   "engines": {
     "node": ">=18"
