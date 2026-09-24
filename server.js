@@ -7,8 +7,8 @@
 //           SHOPIFY_DOMAIN, SHOPIFY_API_VERSION (optional)
 // ═══════════════════════════════════════════════════
 
-const http = require('http');
-const fs   = require('fs');
+const http   = require('http');
+const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
@@ -23,8 +23,11 @@ const SCOPES         = 'read_orders,read_all_orders,read_discounts';
 const REQUIRED       = ['read_orders', 'read_discounts'];
 
 const MAX_ORDER_PAGES = 20;          // 20 × 250 = 5000 orders max per code
-const CACHE_TTL_MS    = 60 * 1000;   // cache each code's result for 1 minute
+const CACHE_TTL_MS    = 20 * 1000;   // cache each code's result for 20 seconds
 const RATE_LIMIT      = 30;          // requests per IP per minute
+
+// Orders with these payment states don't earn commission
+const EXCLUDED_STATUSES = ['REFUNDED', 'VOIDED', 'EXPIRED'];
 
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 
@@ -201,7 +204,7 @@ async function getDiscountTitle(code) {
   return node ? (node.codeDiscount?.title || '') : null;
 }
 
-async function getPaidOrders(code) {
+async function getEarningOrders(code) {
   const orders = [];
   let after = null;
   for (let page = 0; page < MAX_ORDER_PAGES; page++) {
@@ -209,10 +212,12 @@ async function getPaidOrders(code) {
       query($q: String!, $after: String) {
         orders(first: 250, after: $after, query: $q, sortKey: CREATED_AT, reverse: true) {
           pageInfo { hasNextPage endCursor }
-          nodes { id name createdAt }
+          nodes { id name createdAt displayFinancialStatus cancelledAt test }
         }
-      }`, { q: `discount_code:${code} financial_status:paid`, after });
-    orders.push(...data.orders.nodes);
+      }`, { q: `discount_code:${code}`, after });
+    // Paid and pending (e.g. COD) both count; cancelled/refunded/test don't
+    orders.push(...data.orders.nodes.filter(o =>
+      !o.cancelledAt && !o.test && !EXCLUDED_STATUSES.includes(o.displayFinancialStatus)));
     if (!data.orders.pageInfo.hasNextPage) break;
     after = data.orders.pageInfo.endCursor;
   }
@@ -220,7 +225,7 @@ async function getPaidOrders(code) {
 }
 
 async function lookup(code) {
-  const [title, orders] = await Promise.all([getDiscountTitle(code), getPaidOrders(code)]);
+  const [title, orders] = await Promise.all([getDiscountTitle(code), getEarningOrders(code)]);
 
   if (title === null && orders.length === 0) return { found: false, code };
 
@@ -238,7 +243,8 @@ async function lookup(code) {
     orders: orders.map(o => ({
       id:   o.id.split('/').pop(),
       name: o.name,
-      date: o.createdAt
+      date:   o.createdAt,
+      status: o.displayFinancialStatus
     }))
   };
 }

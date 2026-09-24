@@ -98,6 +98,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ob{font-size:9px;padding:2px 6px;border-radius:5px;font-weight:600}
 .ob-today{background:rgba(200,134,10,.25);color:#C8860A}
 .ob-month{background:rgba(27,67,50,.5);color:#34D399}
+.ob-pending{background:rgba(255,255,255,.1);color:rgba(255,255,255,.6)}
 .noo{padding:32px;text-align:center;color:rgba(255,255,255,.3);font-size:13px;line-height:1.8}
 .refresh{padding:8px 16px;font-size:10px;color:rgba(255,255,255,.25);text-align:right;border-top:1px solid rgba(255,255,255,.06)}
 
@@ -277,8 +278,9 @@ function render(d){
     list.innerHTML=sorted.map(o=>{
       const dt=istDay(o.date);
       const badge=dt===today?'<span class="ob ob-today">Aaj</span>':dt.slice(0,7)===month?'<span class="ob ob-month">Is mahine</span>':'';
+      const pending=o.status&&o.status!=='PAID'?'<span class="ob ob-pending">Payment pending</span>':'';
       const ds=o.date?new Date(o.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Kolkata'}):'-';
-      return `<div class="orow"><div class="oicon">🛒</div><div class="oinfo"><div class="oid">${esc(o.name||('#'+o.id))} ${badge}</div><div class="odate">${ds}</div></div><div class="oearn">+₹${COMMISSION}</div></div>`;
+      return `<div class="orow"><div class="oicon">🛒</div><div class="oinfo"><div class="oid">${esc(o.name||('#'+o.id))} ${badge} ${pending}</div><div class="odate">${ds}</div></div><div class="oearn">+₹${COMMISSION}</div></div>`;
     }).join('');
   }
 
